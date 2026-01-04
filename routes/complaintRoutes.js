@@ -3,12 +3,28 @@ const router = express.Router();
 const Complaint = require("../models/Complaint");
 const axios = require("axios");
 
-// 1. POST: Submit a new complaint
+// 1. POST: Submit a new complaint (UPDATED WITH FALLBACK)
 router.post("/add", async (req, res) => {
   try {
     const { title, description, createdBy } = req.body;
-    const mlResponse = await axios.post("http://127.0.0.1:5001/predict", { text: description });
-    const { category, urgency } = mlResponse.data;
+    
+    // Default values if the AI server (on your laptop) can't be reached
+    let category = "General";
+    let urgency = "Medium";
+
+    try {
+      // Trying to reach the ML server (localhost). 
+      // On Render, this will fail because your laptop isn't the internet.
+      const mlResponse = await axios.post("http://127.0.0.1:5001/predict", 
+        { text: description }, 
+        { timeout: 2000 } // Don't wait more than 2 seconds
+      );
+      category = mlResponse.data.category;
+      urgency = mlResponse.data.urgency;
+    } catch (mlErr) {
+      // Instead of crashing the whole site, we just log the error and use defaults
+      console.log("ML Server offline or unreachable. Using default tags.");
+    }
 
     const complaint = new Complaint({ title, description, category, urgency, createdBy });
     await complaint.save();
@@ -18,7 +34,8 @@ router.post("/add", async (req, res) => {
 
     res.status(201).json({ message: "Success", complaint });
   } catch (error) {
-    res.status(500).json({ error: "Backend failed to reach ML server" });
+    console.error("Database Save Error:", error);
+    res.status(500).json({ error: "Backend failed to save complaint" });
   }
 });
 
@@ -32,7 +49,6 @@ router.get("/all", async (req, res) => {
   }
 });
 
-// --- NEW ADDITION: Feature 1 - Student History ---
 // 3. GET: Fetch complaints for a specific user (Student View)
 router.get("/user/:userId", async (req, res) => {
   try {
@@ -43,7 +59,7 @@ router.get("/user/:userId", async (req, res) => {
   }
 });
 
-// 4. PATCH: Update a complaint's status (Generic)
+// 4. PATCH: Update a complaint's status
 router.patch("/update-status/:id", async (req, res) => {
   try {
     const { status } = req.body;
@@ -74,7 +90,6 @@ router.put("/:id/resolve", async (req, res) => {
       { status: "Resolved" },
       { new: true }
     );
-
     const io = req.app.get("socketio");
     if (io) {
       io.emit("status_updated", {
