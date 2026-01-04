@@ -15,7 +15,7 @@ router.post("/add", async (req, res) => {
     try {
       // Trying to reach the ML server (localhost). 
       // On Render, this will fail because your laptop isn't the internet.
-      const mlResponse = await axios.post("http://127.0.0.1:5001/predict", 
+      const mlResponse = await axios.post("https://hostel-ai-ml.onrender.com/predict", 
         { text: description }, 
         { timeout: 2000 } // Don't wait more than 2 seconds
       );
